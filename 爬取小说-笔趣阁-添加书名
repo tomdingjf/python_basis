@@ -1,0 +1,106 @@
+# -*- coding: utf-8 -*-
+import requests  # 引入requests模块，用于发送HTTP请求
+from lxml import etree  # 引入etree模块，用于XML和HTML的解析
+import os
+
+
+def paqu(book_id, first_zhang,replace_old_txt, replace_new_txt, wan_zhan_server, wen_ben_zhu_ti, biao_ti, xia_yi_zhan_url):
+    """
+    从指定网页抓取书籍内容并保存为文本文件。
+
+    参数:
+    - book_id: 书籍ID，用于构建书籍的URL。
+    - first_zhang: 起始章节，用于构建初始URL。
+    - shu_ming: 书籍名称，用于保存抓取的内容。
+    - replace_old_txt: 需要被替换的原始文本字符串。
+    - replace_new_txt: 替换后的文本字符串。
+    - wan_zhan_server: 完整的网站地址。
+    - wen_ben_zhu_ti: XPath表达式，用于提取正文内容。
+    - biao_ti: XPath表达式，用于提取书籍标题。
+    - xia_yi_zhan_url: XPath表达式，用于提取下一页的URL。
+
+    无返回值。
+    """
+
+    """
+    创建小说文件夹
+    filename = r"/小说/"
+    if not os.path.exists(filename):
+        os.mkdir(filename)
+        print("文件夹创建成功！")
+    """
+
+    # 获取用户输入的书籍信息
+    book_id = input("请输入书籍ID：")
+    first_zhang = input("请输入第几章：")
+    wen_ben_zhu_ti = f'{wen_ben_zhu_ti}/text()'
+    biao_ti = f'{biao_ti}/text()'
+    shujia_book = f" {wan_zhan_server}/book/{book_id}/"
+    url = f"{shujia_book}{first_zhang}.html"
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+    # 发送HTTP请求并获取响应
+    resp = requests.get(shujia_book, headers=headers)
+    resp.encoding = "utf-8"
+
+    # 使用lxml解析HTML响应文本
+    e = etree.HTML(resp.text)
+    author = "//div[2]/div[2]/span[1]/text()"
+    namer = "//h1/text()"
+    # 提取正文内容，替换特定字符串
+    shu_ming = " ".join(e.xpath(namer))+"- - - "+" ".join(e.xpath(author))
+    
+    while True:
+        # 设置请求头，模拟浏览器访问
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+
+        # 发送HTTP请求并获取响应
+        resp = requests.get(url, headers=headers)
+        resp.encoding = "utf-8"
+
+        # 使用lxml解析HTML响应文本
+        e = etree.HTML(resp.text)
+
+        # 提取正文内容，替换特定字符串
+        info = "\n".join(e.xpath(wen_ben_zhu_ti))
+        info = info.replace(replace_old_txt, replace_new_txt)
+
+        # 提取书籍标题
+        title = "\n".join(e.xpath(biao_ti))
+        print(f"正在爬取: {title}")
+
+        # 获取下一页URL
+        try:
+            url = f"{wan_zhan_server}{e.xpath(xia_yi_zhan_url)[0]}"
+        except:
+            print("下一章url无解，结束。")
+            break
+        else:
+            url = f"{wan_zhan_server}{e.xpath(xia_yi_zhan_url)[0]}"
+
+        # 如果URL未改变，说明已遍历到最后一页，循环结束
+        if url == shujia_book:
+            break
+
+        # 将标题和正文内容写入文本文件
+        with open(f"{shu_ming}.txt", "a", encoding="utf-8") as f:
+            # f.write("\n" + info + "\n")
+            f.write("\n" + title + "\n" + info + "\n")
+
+
+if __name__ == "__main__":
+    # 调用函数，实际抓取和保存书籍内容
+    paqu(
+        # 初始化书籍ID和书名
+        book_id="6909",
+        first_zhang="1",
+        # 替换原文本中的特定字符串
+        replace_old_txt="请收藏本站：https://www.biqg.cc。笔趣阁手机版：https://m.biqg.cc",
+        replace_new_txt="",
+        # 定义完整网站地址主服务器
+        wan_zhan_server="https://www.biqg.cc",
+        # 定义XPath用于抓取文本内容、标题和下一页链接
+        wen_ben_zhu_ti='//div/div/div[@class="Readarea ReadAjax_content"]',
+        biao_ti='//div/h1',
+        xia_yi_zhan_url='//div/div/div/a[@class = "Readpage_down js_page_down"]/@href'
+    )
