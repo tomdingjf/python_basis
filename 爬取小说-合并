@@ -1,0 +1,150 @@
+# -*- coding: utf-8 -*-
+import requests
+from lxml import etree
+import time
+import os
+# 导入系统相关的模块
+import sys
+
+
+def send_request(url, max_retries=10):
+    headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
+    retries = 0
+    while retries < max_retries:
+        try:
+            resp = requests.get(url, headers=headers, timeout=0.5)
+            if resp.status_code == 200:
+                return resp
+        except requests.exceptions.RequestException as e:
+            print(f"请求失败，错误信息：{e}")
+            time.sleep(0.5)
+        retries += 1
+    print("已达到最大重试次数，请求失败")
+    return None
+
+
+def mk_wjj(name):
+    """
+    创建一个以日期为名的文件夹，用于存储小说。
+
+    参数:
+    name: 字符串类型，表示文件夹的名称，通常使用日期格式。
+
+    返回值:
+    folder_path: 字符串类型，表示创建的文件夹的完整路径。
+    """
+    base_dir = os.path.dirname(sys.argv[0])  # 获取程序当前所在目录
+    date_str = name
+    # 构建文件夹路径
+    folder_path = os.path.join(base_dir, date_str)
+
+    try:
+        # 尝试创建文件夹
+        os.mkdir(folder_path)
+        print(f"新建文件夹，小说位于：{folder_path}")
+    except FileExistsError:
+        # 如果文件夹已存在，则不进行任何操作
+        print(f"文件夹已经创建，小说位于：{folder_path}")
+        pass
+    return folder_path
+
+
+def fwq_select():
+    select = input("选择服务器 1：www.bqgka.com 2：https://www.biqg.cc :")
+    if select == "1":
+        fwq = 'https://www.bqgka.com'
+        # 初始化替换文本和目标网站地址
+        replace_old_txt = "请收藏本站：https://www.bqgka.com。笔趣阁手机版：https://m.bqgka.com"
+
+    elif select == "2":
+        fwq = "https://www.biqg.cc"
+        replace_old_txt = "请收藏本站：https://www.biqg.cc。笔趣阁手机版：https://m.biqg.cc"
+    else:
+        print("输入错误,请重新输入！")
+        fwq_select()
+    return fwq, replace_old_txt
+
+
+def main():
+    """
+    主函数，实现从指定小说ID获取小说的全部章节标题和内容，并保存到本地文件中。
+    """
+
+    # 创建保存小说文件的文件夹
+    folder_path = mk_wjj("小说文件夹")
+
+    # 初始化替换文本和目标网站地址
+    fwq_adress, replace_old_text = fwq_select()
+    replace_new_txt = ""
+
+    # 输入小说ID
+    print(f"网址为：{fwq_adress}")
+    book_id = input("请输入里小说id：")
+    # name = input("请输入小说名称：")
+
+    # 构造小说详情页URL
+    url = f"{fwq_adress}/book/{book_id}/"
+
+    shu_ben = '//h1/text()'
+    zuo_ze = '//div[@class="small"]/span[1]/text()'
+
+    # 设置请求头，模拟浏览器访问
+    headers = {"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"}
+
+    # 发送GET请求，获取小说目录页内容
+    resp = requests.get(url, headers=headers)
+    # 设置响应内容编码方式
+    resp.endcoding = "utf-8"
+    # 使用lxml解析HTML内容
+    e = etree.HTML(resp.text)
+
+    shuming = "\n".join(e.xpath(shu_ben))
+    # print(f"shuming:{shuming}")
+
+    zuoze = "\n".join(e.xpath(zuo_ze))
+    # print(f"zuoze:{zuoze}")
+    name = shuming + " - - - " + zuoze
+
+    # 获取所有章节链接
+    info = e.xpath('//dd/a/@href')
+
+    # 过滤并处理获取到的章节链接
+    info = [element.strip() for element in info if element.strip()]
+    info = [x for x in info if f"/book/{book_id}" in str(x)]
+
+    # 构造完整的章节内容页URL列表
+    mulu_url = []
+    for i in info:
+        mulu_url.append(fwq_adress + i)
+
+    # 遍历章节URL列表，获取每章标题和内容
+    for i in mulu_url:
+        # 定义XPath表达式，用于获取章节内容和标题
+        zhu_ti = '//*[@id="chaptercontent"]/text()'
+        baio_ti = '//div/div/h1/text()'
+
+        # # 发送GET请求，获取章节页面内容
+        # resp = requests.get(i, headers=headers)
+
+        resp = send_request(i)
+        if resp is None:
+            print("请求失败，请稍后再试！")
+            break
+        # 设置响应内容编码方式
+        resp.endcoding = "utf-8"
+        # 解析章节页面内容
+        e = etree.HTML(resp.text)
+        # 获取章节标题和内容
+        info = "\n".join(e.xpath(zhu_ti))
+        info = info.replace(replace_old_text, replace_new_txt)
+        baio_ti = "\n".join(e.xpath(baio_ti))
+
+        # 打印当前正在爬取的章节标题
+        print(f"正在爬取：{baio_ti}")
+        # 将章节标题和内容写入本地文件
+        with open(f"{folder_path}/{name}.txt", "a", encoding="utf-8") as f:
+            f.write(baio_ti + "\n" + info + "\n")
+
+
+if __name__ == "__main__":
+    main()
